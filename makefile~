@@ -1,0 +1,6 @@
+CC=g++
+
+CFLAGS= -lGL -GLU -lglut
+
+all: source.cpp
+	$(CC) source.cpp $(CFLAGS)

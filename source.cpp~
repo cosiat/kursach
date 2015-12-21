@@ -1,119 +1,144 @@
+#define DEBUG 0
+
 #include <iostream>
 #include <stdlib.h>
 #include <GL/gl.h>
 #include <GL/glut.h>
+#include <math.h>
 
 using namespace std;
 
-float ballX = -0.3f;
-float ballY = 0.0f;
-float ballZ = -1.0f;
-/*
-float ballX2 = 0.3f;
-float ballY2 = 0.0f;
-float ballZ2 = -1.0f;
-*/
-static int flag=1;
+double rz = 6371000.0;
+double vz = 9000.0;
+double GM = 398616102080000;
+double R = 6371000.0;
+double xz = 0.0;
+double yz = 0.5;
+double dt = 100.0;
 
-void drawBall(void) {
+double qe;
+double qp;
 
-        glColor3f(0.0, 1.0, 0.0); //set ball colour
-        glTranslatef(ballX,ballY,ballZ); //moving it toward the screen a bit on creation
-        glutSolidSphere (0.1, 10, 10); //create ball.
+double cosz;
+double pz;
+double ez;
+double az;
+double deltaz;
+double n;
+double root;
 
-}
+double E;
+double r;
+double u;
+double t;
 
-void keyPress(int key, int x, int y)
+double x;
+double y;
+double z = 0;
+
+bool isGoing;
+int dir;
+
+int width = 700;
+int height = 700;
+
+void calculateInitialShit()
 {
-      if(key==GLUT_KEY_RIGHT)
-        ballX -= 0.05f;
-    if(key==GLUT_KEY_LEFT)
-        ballX  += 0.05f;
-
-    glutPostRedisplay();
+	qp = (rz*rz * vz*vz) / GM;
+	qe = 2.0 / rz - vz*vz / GM;
+	isGoing = false;
 }
 
-void initRendering()
+void calculateShit()
 {
-    glEnable(GL_DEPTH_TEST);
+	pz = qp * cosz*cosz;
+	ez = sqrt(1.0 - pz*qe);
+	deltaz = -acos((pz - rz) / (ez * rz));
+	az = pz / (1 - ez*ez);
+	n = sqrt(GM / (az*az*az));
+	root = sqrt((1 + ez) / (1 - ez));
+	if (DEBUG)
+	{
+		cout << "pz=" << pz << endl << "ez=" << ez << endl << "deltaz=" << deltaz << endl << "az=" << az << endl << "n=" << n << endl << "root=" << root << endl;
+	}
 }
 
-//Called when the window is resized
-void handleResize(int w, int h) {
-    //Tell OpenGL how to convert from coordinates to pixel values
-    glViewport(0, 0, w, h);
-    
-    glMatrixMode(GL_PROJECTION); //Switch to setting the camera perspective
-    
-    //Set the camera perspective
-    glLoadIdentity(); //Reset the camera
-    gluPerspective(45.0,                  //The camera angle
-                   (double)w / (double)h, //The width-to-height ratio
-                   1.0,                   //The near z clipping coordinate
-                   200.0);                //The far z clipping coordinate
-}
-
-void drawScene()
+void timerFunction(int value)
 {
-    glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
-   
-    glMatrixMode(GL_MODELVIEW);
-   
-    glLoadIdentity();
-    drawBall();
-    //drawBall2();
-
-    glutSwapBuffers();
+	t = value;
+	E = n * t;
+	for (int i = 0; i < 10; i++)
+	{
+		E = ez * sin(E) + n * t;
+	}
+	u = (deltaz + 2.0 * atan(root * tan(E / 2.0))) * dir;
+	r = az * (1.0 - ez * cos(E));
+	x = r * sin(u) / R * 0.5;
+	y = r * cos(u) / R * 0.5;
+	glutPostRedisplay();
+	if (isGoing /*&& (sqrt((x - xz)*(x - xz) + (y - yz)*(y - yz)) > 0.4)*/)
+	{
+		t += dt;
+		glutTimerFunc(25, timerFunction, t);
+	}
+	else
+	{
+		isGoing = false;
+	}
 }
 
-//float _angle = 30.0f;
-void update(int value) {
-    if(flag)
-    {
-    ballX += 0.001f;
-       if(ballX>0.3)
-       {
-           flag=0;
+void mouseFunction(int button, int state, int x, int y)
+{
+	if (state == GLUT_UP && button == GLUT_LEFT_BUTTON)
+	{
+		double clickX = 2.0f * ((float)x / (float)width - 0.5);
+		double clickY = 2.0f * (-((float)y / (float)height - 0.5));
 
-       }
-    }
-    if (!flag)
-    {
-        ballX -= 0.001f;
-        if(ballX<-0.3)
-       {
-           flag=1;
+		if (clickY < yz) return;
 
-       }
-    }
-   
-    glutPostRedisplay(); //Tell GLUT that the display has changed
-   
-    //Tell GLUT to call update again in 25 milliseconds
-    glutTimerFunc(25, update, 0);
+		isGoing = true;
+
+		cosz = clickX / sqrt((clickX - xz)*(clickX - xz) + (clickY - yz)*(clickY - yz));
+		dir = (cosz > 0) ? 1 : -1;
+		std::cout << clickX << ' ' << clickY << ' ' << cosz << endl;
+
+		calculateShit();
+		glutTimerFunc(25, timerFunction, 0);
+	}
+	else if (state == GLUT_DOWN && button == GLUT_RIGHT_BUTTON)
+	{
+		isGoing = false;
+		glutPostRedisplay();
+	}
+}
+
+void display()
+{
+	glClear(GL_COLOR_BUFFER_BIT);
+	if (isGoing)
+		glColor3f(0.0, 0.0, 1.0);
+	else
+		glColor3f(0.0, 1.0, 0.0);
+	glutSolidSphere (0.5, 20, 20); 
+        glColor3f(1.0, 0.0, 0.0);
+	if (isGoing)
+	{
+		glPushMatrix();
+		glTranslatef(x, y, z); 
+		glutSolidSphere (0.05, 20, 20); 
+		glPopMatrix();
+	}
+	glutSwapBuffers();
 }
 
 int main(int argc,char** argv)
 {
-    glutInit(&argc,argv);
-   
-    glutInitDisplayMode(GLUT_DOUBLE|GLUT_RGB|GLUT_DEPTH);
-   
-    glutInitWindowSize(400,400);
-   
-    glutCreateWindow("Moving Circle");
-   
-    initRendering();
-   
-    glutDisplayFunc(drawScene);
-
-    glutSpecialFunc(keyPress);
-    glutReshapeFunc(handleResize);
-    //autorot();
-
-    glutTimerFunc(25, update, 0);
-
-    glutMainLoop();
-   
-    return(0);
+	calculateInitialShit();
+	glutInit(&argc,argv);
+	glutInitWindowSize(width, height);
+	glutCreateWindow("Moving Circle");
+	glutDisplayFunc(display);
+	glutMouseFunc(mouseFunction);
+	glutMainLoop();
+	return(0);
 }
